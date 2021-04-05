@@ -1,0 +1,117 @@
+---
+title: "Temporal Disaggregation"
+output: html_notebook
+---
+
+ 
+
+```{r load packages}
+#install.packages('tsbox')
+if(!require(tempdisagg)){install.packages("tempdisagg",dependencies = T);library(tempdisagg)}else{library(tempdisagg)}
+
+if(!require(lubridate)){install.packages("lubridate",dependencies = T);library(lubridate)}else{library(lubridate)}
+if(!require(tidyverse)){install.packages("tidyverse",dependencies = T);library(tidyverse)}else{library(tidyverse)}
+library(tsbox)
+#data(tempdisagg)
+#head(gdp.q)
+```
+
+```{r Geographic disaggergation to neighborhoods from 20xx to 2018}
+MMGData<-read.csv("MMG_State_Level_Regression_Model_Data.csv")
+#MMGData$Survey.year<-as.factor(MMGData$Survey.year)
+MMGData<-MMGData%>%dplyr::select(FI,UN,POV,Total.household.income,HISP,BLACK,OWN,DSBL,State,Survey.year)
+AvondaleData<-read.csv("Avondaledata.csv")
+AvondaleData$Survey.year<-as.factor(AvondaleData$Survey.year)
+#############################Need Models#########################
+###Map the meal gap model###
+############################
+years=c(2011:2018)
+#FIAvondale<-data.frame(matrix(0,nrow=length(years),ncol=2))
+FIAvondale<-data.frame(time=c(as.Date("2011-01-01")), value=c(0))
+ct=0
+#Calculate food insecurity for Avondale over the past years
+for (yr in years){#yr=2011
+  ct=ct+1
+  MMGData$Survey.year
+  MMGDataPortion<-MMGData%>%
+    filter(Survey.year<=yr)
+
+  MMGDataPortion$Survey.year<-as.factor(MMGDataPortion$Survey.year)
+  
+  MMGModel<-lm(FI ~ ., data=MMGDataPortion) 
+  #summary(MMGModel)
+  #predict Avondale data over all years from 2011-2018
+  AvondaleData$Survey.year=yr
+  AvondaleData$Survey.year<-as.factor(AvondaleData$Survey.year)
+  FIAvondale<- rbind(FIAvondale,data.frame(time=as.Date(paste0("1jan",yr), "%d%b%Y"),
+                                           value=predict(MMGModel,AvondaleData)*100))
+  #FIAvondale[ct,2]<-predict(MMGModel,AvondaleData)
+  #FIAvondale[ct,1]<- as.Date(paste0("1jan",yr), "%d%b%Y")
+}
+#write.csv(FIAvondale,"FIAvondale.csv")
+FIAvondale<-FIAvondale[-1,]#Avondale FI data over all years from 2011-2018
+
+```
+
+
+
+In this section, we disaggregate data temporally based on various approaches. One way is to use the geographically disagreagted food insecurity rate using the map the meal gap model appraoch. Specifically, we take the food insecurity estimates for neighborhoods then implement temporal disaggreagtion approaches from the R package. The indicator series we use is unemploymnet rate at the monthly level.  
+```{r disaggregate FI from yearly to temporally using UE as indicator}
+#prepare unemployment rate data
+ueData<-read.csv("Cincinnati Monthly Unemployment Rate.csv")
+ueData$time<-parse_date_time(ueData$Label, orders = "ym")
+ueDataforTempDisagg<-ueData%>%
+  dplyr::select(time,Value)
+mydates <- interval(start = "2011-01-01", end = "2018-12-25")
+#get data for 2020
+ueDataforTempDisagg <- ueDataforTempDisagg[ueDataforTempDisagg$time %within% mydates,]
+names(ueDataforTempDisagg)[2]<-"value"
+ueDataforTempDisagg$time<-as.Date(ueDataforTempDisagg$time)
+#prepare Avondale yearly data
+FIDataforTempDisagg<-FIAvondale
+
+
+######Disaggregate by time#####
+
+##Method chow-lin-maxlog
+#FItemporalEst1<- td(FIDataforTempDisagg ~ ueDataforTempDisagg,conversion = "mean", to = "monthly",method="chow-lin-fixed",fixed.rho = 0.7)
+
+#ggplot() + 
+#  geom_line(data = predict(FItemporalEst), aes(x = time, y = value), color = "red") +
+#   geom_line(data = FIDataforTempDisagg, aes(x = time, y = value), color = "blue") +
+#   xlab('data_date') +
+#   ylab('percent.change')
+# ts_plot(
+#   ts_scale(
+#     ts_c(predict( FItemporalEst), FIDataforTempDisagg)
+#   ),
+#   title = "Monthly disaggregated Food Insecurity for Avondale",
+#   subtitle = "Indicator is monthly unemployment rate"
+# )
+##First test for cointegration of food insecurity and unemployment rate using augmented Dickey-Fuller test
+library("tseries")
+comb <- lm(p~q)
+
+
+
+###Denton-Cholette no indicator
+FItemporalEst1<- td(FIDataforTempDisagg ~0+ ueDataforTempDisagg, to = "monthly",conversion = "mean",method="fernandez")
+summary(FItemporalEst1)
+ 
+ts_plot(
+  ts_scale(
+    ts_c(predict(FItemporalEst1), FIDataforTempDisagg)
+  ),
+  title = "Monthly disaggregated Avondale Food insecurity",
+  subtitle = "no indicator"
+)
+
+
+
+
+data(swisspharma)
+
+sales.a
+sales.q
+
+```
