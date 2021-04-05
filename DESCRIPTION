@@ -22,7 +22,6 @@ Imports:
     lubridate,
     tidyverse,
     tseries
-
 Suggests: 
     rmarkdown,
     knitr
